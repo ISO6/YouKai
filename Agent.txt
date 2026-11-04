@@ -1,0 +1,252 @@
+基于LLM的攻防智能体的研究与设计
+初步思路: LLM通过调用Nmap进行网络探测，调用Nuclei匹配漏洞，通过匹配存放在向量数据库中的CVE信息以及攻击链路，再调用Metasploit来进行漏洞利用
+
+vscode字体: https://github.com/tonsky/FiraCode (FiraCode)
+
+---------------------------------------------------------------
+Copilot:
+UI框架: React+TpyeScript
+系统组件: Fluent UI(React组件库)
+宿主容器: WebView2(Windows)
+---------------------------------------------------------------
+
+[*]Agent(Nmap+Nuclei+Metasploit):
+LLM ChatBot => Tool Calling => MCP Server => Playwright MCP 
+=> ReAct Agent => LangGraph => 单Agent自主运行 => Multi-Agent协作
+
+e.g. deepseek harness渗透测试模式: https://github.com/howmp/dsh-pentest
+goal => intent => fact => finding
+
+[*]核心工具
+0. ProjectDiscovery全家桶: Subfinder(子域发现), Naabu(端口发现), Httpx(Web识别), Nuclei(漏洞检测), Katana(网页爬虫遍历url)...
+1. Nmap(深度侦察): 网络探测，端口扫描，服务识别(包括网络层，传输层和部分应用层)
+2. Subfinder: 扫描子域
+3. Naabu: 用于端口发现(与Nmap类似)，但只能扫描端口
+4. Httpx: 只关心HTTP和HTTPS(高级Web探针=>状态码，标题，技术栈，页面长度，服务器信息，截图...)
+5. Nuclei: 匹配漏洞
+6. LLM模型: Qwen3(Qwen3-8B), GPT5, Claude Opus (DeepSeek V4.1 Flash)
+7. Chroma: CVE-Chroma存放已知CVE信息以及攻击链路
+8. Metasploit指南: https://www.cnblogs.com/wanghaidong/p/19651592
+9. Tauri+React+Typescript构建ui
+
+Naabu => Httpx => Nuclei => Nmap => Metasploit
+
+
+ProjectDiscovery(专注于网络安全自动化和漏洞发现提出开源工具): https://docs.projectdiscovery.io
+Nuclei开源扫描器: https://github.com/projectdiscovery/nuclei
+Nmap: https://nmap.org/
+CVE JSON数据: 托管在cvelistV5仓库中，每日/每小时都有增量文件(NVD CVE API 2.0): https://github.com/CVEProject/cvelistV5
+Metasploit: https://github.com/rapid7/metasploit-framework
+[*] 不一定包含攻击手段
+典型CVE分类: https://zhuanlan.zhihu.com/p/20300044318
+CVE->Metasploit Exploit映射库: https://github.com/dogasantos/msfcve
+
+---------------------------------------------------------------
+Nuclei(大规模资产扫描):
+https://www.cnblogs.com/jxrj-steve-wm/articles/18114251
+https://gh0stninja.github.io/2024/07/01/nuclei%20%E6%BC%8F%E6%B4%9E%E6%89%AB%E6%8F%8F%E5%B7%A5%E5%85%B7%E7%9A%84%E4%BD%BF%E7%94%A8%E6%96%B9%E6%B3%95/
+
+Auxiliary(深度漏洞验证): 用于验证Nuclei发现的漏洞
+---------------------------------------------------------------
+
+[*]漏洞利用(?): https://github.com/mudongliang/LinuxFlaw/blob/master/CVE-2006-5815/README.md
+
+[*]MCP框架: LLM => MCP Cient => MCP Server => Tool Adapter => External Command
+weather_mcp/
+├── server.py	# MCP Server
+├── tools/
+│   └── weather_tool.py		# 业务逻辑层(调用外部api)
+├── services/
+│   └── weather_service.py	# FastMCP服务器
+├── models/
+│   └── weather_model.py	# 模型
+├── config/
+│   └── settings.py
+└── .env
+
+
+
+
+
+完整工作流:
+CVE/Chroma检索 => 资产版本匹配 => Metasploitable模块关联 => LLM生成验证建议
+=> 策略引擎检查授权范围 => 人工批准 => 隔离靶场执行验证 => 结果脱敏，入库和生成报告
+[*]限制条件:
+Agent自主调用: 查询漏洞，搜索匹配模块，读取模块参数和生成验证计划，不执行攻击
+人工批准: 高风险工具需审批
+
+
+多Agent划分:
+1. CVE Intelligence Agent: 负责检索 Chroma、解释漏洞和整理证据
+
+2. Asset Matching Agent: 负责产品、版本、平台、补丁状态匹配
+
+3. Validation Planner Agent: 只生成验证方案，不执行
+
+4. Policy Agent: 检查目标范围、模块允许列表和审批状态
+
+5. Lab Executor: 非 LLM 组件，只执行固定、受限操作(连接Metasploit Framework RPC)
+
+6. Report Agent: 将结果写回 Chroma，并生成修复建议
+
+Metasploit RPC API需要用Adapter层硬隔离
+
+MCP Client
+    │
+    ▼
+只读 MCP Server
+    │
+    ├── search_modules(cve_id)
+    ├── get_module_info(module_type, module_name)
+    ├── index_cve_module_mapping(...)
+    ├── search_cve_modules(query)
+    └── analyze_cve(cve_id)
+             │
+             ▼
+        LangGraph
+    ┌────────┼─────────┐
+    ▼        ▼         ▼
+ Chroma   Metasploit   规则分析
+         ReadOnly
+          Adapter
+		  
+readonly-security-mcp/
+├── app/
+│   ├── config.py
+│   ├── metasploit_adapter.py
+│   ├── cve_store.py
+│   ├── graph.py
+│   └── server.py
+├── data/
+│   └── chroma/
+├── .env
+└── requirements.txt		
+
+[*]目标url与CVE匹配的原理:
+目标网站 => 识别服务 => 识别产品 => 识别版本 => 漏洞库匹配 => 判断是否存在对应的CVE
+步骤:
+1. 收集信息(Web服务器，框架，CMS，中间件，数据库，插件，组件，版本...): 如Apache 2.4.49, PHP 7.4 ...
+2. 
+
+[*]怎么通过CVE找到相应的metasploit模块:
+https://labex.io/zh/tutorials/kali-search-for-modules-in-metasploit-594037
+https://blog.csdn.net/u010680986/article/details/120809762
+https://github.com/dogasantos/msfcve
+使用例子:
+https://blog.csdn.net/l0_01/article/details/149914310
+[*]Chroma建立图谱:
+	{
+	  "cve_id": "CVE-2021-41773",
+	  "products": [
+		"Apache HTTP Server"
+	  ],
+	  "affected_versions": [
+		"2.4.49"
+	  ],
+	  "cwe": [
+		"CWE-22"
+	  ],
+	  "cvss": 7.5,
+	  "attack_vector": "NETWORK",
+	  "metasploit_modules": [
+		"apache_41773_rce"
+	  ]
+	}
+
+最终方案:
+Browser Agent
+      ↓
+识别网站技术栈
+
+Recon Agent
+      ↓
+提取组件和版本
+
+CVE Agent
+      ↓
+Chroma检索漏洞
+
+Module Agent
+      ↓
+检索Metasploit模块
+
+Planner Agent
+      ↓
+生成验证方案
+
+Report Agent
+      ↓
+生成分析报告
+
+一个完整的MCP Server结构设计:(后续新增mcp_server/server.py即可，mcp_server与tools同级)
+Agent调用链: tool => service => adapter => nmap => xml => parser => response
+tools/
+└── nmap/
+    │
+    ├── __init__.py
+    │
+    ├── tool.py		# LangGraph接触入口
+    │
+    ├── services/	# 业务逻辑层: 组织流程，异常处理，日志，缓存，权限
+    │   └── nmap_service.py
+    │
+    ├── adapters/	# 执行Nmap(只调用外部程序)
+    │   └── nmap_adapter.py
+    │
+    ├── parsers/	# 专门解析文件 => 输出ScanResponse
+    │   └── xml_parser.py
+    │
+    ├── schemas/	# 请求和返回模板
+    │   ├── requests.py
+    │   └── responses.py
+    │
+    ├── models/		# 模型(port_info, service_info...)
+    │   ├── host.py
+    │   ├── port.py
+    │   └── service.py
+    │
+    ├── policies/	# 权限控制
+    │   ├── allowlist.py
+    │   └── validation.py
+    │
+    ├── config/		# 配置层
+    │   └── settings.py
+    │
+    ├── exceptions/	# 异常层
+    │   └── errors.py
+    │
+    ├── tests/
+    │   ├── test_parser.py
+    │   ├── test_service.py
+    │   └── test_tool.py
+    │
+    └── README.md
+	
+e.g. Metasploit(https://github.com/rapid7/metasploit-framework/blob/master/modules/exploits/windows/browser/adobe_flash_copy_pixels_to_byte_array.rb):
+漏洞类型: Remote
+漏洞利用稳定性: GreatRanking (ExcellentRanking,GreatRanking,GoodRanking,NormalRanking,LowRanking)
+漏洞名称: Name
+漏洞描述: Description
+作者: Author
+参考: References(json主要来源)
+平台: Platform
+参数配置:
+	1. 模块自身定义: 提取register_options()
+	2. 父类继承(模块内无定义): 通过 include Msf::Exploit::Remote::BrowserExploitServer 获得参数
+	
+	
+Exploit标准模板:
+class MetasploitModule < Msf::Exploit::Remote
+	include Msf::Exploit::Remote::HttpClient
+	
+	prepend Msf::Exploit::Remote::AutoCheck
+	
+	def initialize(info = {})	# 包含漏洞的所有信息(module_name, cve, description, author, target, disclosure_date...)
+	end
+	
+	def check		# 让agent执行check => 判断解决 => 决定是否使用exploit
+	end
+	
+	def exploit		# 执行exploit
+	end
+end
