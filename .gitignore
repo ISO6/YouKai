@@ -1,100 +1,12 @@
 # ============================================================
 # YouKai — LLM-driven Recon Agent
-# 规则顺序有讲究：通用 → 具体 → 反选（! 必须写在忽略规则之后）
 # ============================================================
 
-# ---------- 密钥与环境变量（最高优先级，务必置顶）----------
+# 忽略 .env 本身
 .env
+
+# 忽略所有 .env.* 变体
 .env.*
-.env.local
-.env.production
+
+# 对 .env.example 做例外（必须放在最后）
 !.env.example
-!**/.env.example
-*.pem
-*.key
-*.p12
-secrets/
-
-# ---------- Python 虚拟环境 ----------
-# 根规则显式写死，不依赖 .venv/.gitignore 的自保
-.venv/
-venv/
-env/
-ENV/
-.conda/
-.python-version
-
-# ---------- Python 缓存与构建产物 ----------
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-dist/
-*.egg-info/
-.eggs/
-pip-wheel-metadata/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-.coverage.*
-htmlcov/
-.tox/
-.nox/
-
-# ---------- Nmap / 侦察产物 ----------
-# 扫描结果不进版本库，避免体积膨胀与误提交敏感资产信息
-*.xml
-*.nmap
-*.gnmap
-*.json.scan
-scans/
-output/
-reports/
-artifacts/
-logs/
-*.log
-
-# ---------- 向量库与本地数据库（中期接入 Chroma 时用）----------
-chroma_db/
-*.chroma
-.chroma/
-*.sqlite
-*.sqlite3
-*.db
-
-# ---------- 模型与数据（体积大，另用 Release / Git LFS）----------
-models/
-datasets/
-checkpoints/
-*.pth
-*.pt
-*.bin
-*.gguf
-*.onnx
-*.safetensors
-
-# ---------- IDE ----------
-# .idea/ 末尾斜杠不可省；*.iml 等是 PyCharm 在项目根额外生成的单文件
-.idea/
-*.iml
-*.ipr
-*.iws
-.vscode/
-!.vscode/extensions.json
-*.swp
-*.swo
-
-# ---------- 操作系统 ----------
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# ---------- 临时文件 ----------
-*.tmp
-*.bak
-*.orig
-*.rej
-~$*
